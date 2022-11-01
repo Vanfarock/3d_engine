@@ -107,24 +107,24 @@ class Engine:
         #     self.draw_triangle(triangle)
 
     def project(self, mesh: Mesh) -> Mesh:
-        rotation_matrix_x = get_rotation_matrix_x(0)
-        rotation_matrix_z = get_rotation_matrix_z(0)
+        rotation_matrix_x = get_rotation_matrix_x(180)
+        rotation_matrix_y = get_rotation_matrix_y(180)
         scaling_matrix = get_scaling_matrix(200, 200 * self.height / self.width, 1)
         translation_matrix = get_translation_matrix(self.width / 2, self.height / 2, 1)
 
         result_triangles = []
         for triangle in mesh.triangles:
             point0 = Transform(triangle.points[0].as_matrix())\
-                .multiply(rotation_matrix_z)\
                 .multiply(rotation_matrix_x)\
+                .multiply(rotation_matrix_y)\
                 .vector_matrix
             point1 = Transform(triangle.points[1].as_matrix())\
-                .multiply(rotation_matrix_z)\
                 .multiply(rotation_matrix_x)\
+                .multiply(rotation_matrix_y)\
                 .vector_matrix
             point2 = Transform(triangle.points[2].as_matrix())\
-                .multiply(rotation_matrix_z)\
                 .multiply(rotation_matrix_x)\
+                .multiply(rotation_matrix_y)\
                 .vector_matrix
 
             point0[2] -= 20

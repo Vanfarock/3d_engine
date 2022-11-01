@@ -7,10 +7,10 @@ def get_rotation_matrix_x(theta: float):
 
     rotation_matrix_x = np.zeros((4, 4))
     rotation_matrix_x[0, 0] = 1
-    rotation_matrix_x[1, 1] = np.cos(theta_rad * 0.5)
-    rotation_matrix_x[1, 2] = np.sin(theta_rad * 0.5)
-    rotation_matrix_x[2, 1] = -np.sin(theta_rad * 0.5)
-    rotation_matrix_x[2, 2] = np.cos(theta_rad * 0.5)
+    rotation_matrix_x[1, 1] = np.cos(theta_rad)
+    rotation_matrix_x[1, 2] = np.sin(theta_rad)
+    rotation_matrix_x[2, 1] = -np.sin(theta_rad)
+    rotation_matrix_x[2, 2] = np.cos(theta_rad)
     rotation_matrix_x[3, 3] = 1
     return rotation_matrix_x
 
