@@ -1,8 +1,9 @@
+from shapes.mesh import Mesh
 from shapes.triangle import Triangle
 from util.vector import Vector3
 
 class ObjectLoader:
-    def load(filename: str) -> 'list[Triangle]':
+    def load(filename: str) -> Mesh:
         with open(filename) as f:
             vertices = []
             triangles = []
@@ -16,4 +17,4 @@ class ObjectLoader:
                     items = line.split(' ')
                     i, j, k = int(items[1]), int(items[2]), int(items[3])
                     triangles.append(Triangle((vertices[i - 1], vertices[j - 1], vertices[k - 1]), 1))
-            return triangles
+            return Mesh(triangles)

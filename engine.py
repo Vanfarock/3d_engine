@@ -1,57 +1,53 @@
 import pygame
 from camera.camera import Camera
+from light.single_direction import SingleDirectionLight
+from matrix.transform import Transform
 from object_loader import ObjectLoader
+from projector import Projector
+from shapes.mesh import Mesh
 from shapes.triangle import Triangle
 from util.color import Color
+from util.drawing_mode import DrawingMode
 from util.vector import Vector3
 from util.matrix import *
 
-MAX_FPS = 120
 
 class Engine:
-    def __init__(self):
+    def __init__(self, max_fps: int, fov: float, near: float, far: float):
         self.running: bool = True
+        
         self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
         self.width = self.screen.get_width()
         self.height = self.screen.get_height()
-        self.clock = pygame.time.Clock()
-
-        self.light = Vector3(0, 0, 1).normalize()
-        self.camera = Camera(Vector3(0, 0, 0), Vector3(0, -90, 0))
-        self.look_direction = Vector3(0, 0, 1)
-        self.up = Vector3(0, 1, 0)
         
+        self.clock = pygame.time.Clock()
+        self.max_fps = max_fps
+        self.ticks = 0
+        
+        self.light = SingleDirectionLight(Vector3(0, 0, 1))
+        self.camera = Camera(Vector3(0, 0, 0), Vector3(0, 1, 0), Vector3(0, -90, 0))
         self.axis_mesh = ObjectLoader.load('axis.obj')
         self.spaceship_mesh = ObjectLoader.load('spaceship.obj')
+
+        self.drawing_mode = DrawingMode.Solid | DrawingMode.Wireframe
+
+        self.projector = Projector(
+            self.height / self.width, 
+            fov,
+            near,
+            far)
         
-        self.aspect_ratio = self.height / self.width
-        self.projection_matrix = get_projection_matrix(
-            self.aspect_ratio,
-            fov=90,
-            near=0.1,
-            far=1_000
-        )
-
-        self.ticks = 0
-        self.theta_x = 0
-        self.theta_y = 0
-        self.theta_z = 0
-
     def run(self):
         pygame.init()
 
         while self.running:            
-            self.ticks = self.clock.tick(MAX_FPS)
+            self.ticks = self.clock.tick(self.max_fps)
 
             self.screen.fill(Color.BLACK)
             
             self.check_events()
 
             self.draw()
-
-            # self.theta_x += 0.1 * self.ticks
-            # self.theta_y += 0.1 * self.ticks
-            # self.theta_z += 0.1 * self.ticks
 
             pygame.display.flip()
 
@@ -65,166 +61,118 @@ class Engine:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
 
-        camera_speed = 0.01 * self.ticks
+        move_speed = 0.01 * self.ticks
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_d]:
-            self.camera.position.add(Vector3(camera_speed, 0, 0))
-        if keys[pygame.K_a]:
-            self.camera.position.add(Vector3(-camera_speed, 0, 0))
-        if keys[pygame.K_w]:
-            self.camera.position.add(Vector3(0, 0, -camera_speed))
-        if keys[pygame.K_s]:
-            self.camera.position.add(Vector3(0, 0, camera_speed))
         if keys[pygame.K_SPACE]:
-            self.camera.position.add(Vector3(0, -camera_speed, 0))
+            self.camera.move(Vector3(0, -move_speed, 0))
+            self.light.direction = self.camera.get_look_direction()
         if keys[pygame.K_LCTRL]:
-            self.camera.position.add(Vector3(0, camera_speed, 0))
+            self.camera.move(Vector3(0, move_speed, 0))
+            self.light.direction = self.camera.get_look_direction()
+        if keys[pygame.K_w]:
+            self.camera.move(Vector3(0, 0, -move_speed))
+            self.light.direction = self.camera.get_look_direction()
+        if keys[pygame.K_s]:
+            self.camera.move(Vector3(0, 0, move_speed))
+            self.light.direction = self.camera.get_look_direction()
+        if keys[pygame.K_a]:
+            self.camera.move(Vector3(-move_speed, 0, 0))
+            self.light.direction = self.camera.get_look_direction()
+        if keys[pygame.K_d]:
+            self.camera.move(Vector3(move_speed, 0, 0))
+            self.light.direction = self.camera.get_look_direction()
 
+        mouse_sensitivity_x = 0.1 * self.ticks
+        mouse_sensitivity_y = 0.1 * self.ticks
         if keys[pygame.K_LEFT]:
-            self.camera.rotation.add(Vector3(0, camera_speed*10, 0))
+            self.camera.rotate(Vector3(0, mouse_sensitivity_x, 0))
+            self.light.direction = self.camera.get_look_direction()
         if keys[pygame.K_RIGHT]:
-            self.camera.rotation.add(Vector3(0, -camera_speed*10, 0))
+            self.camera.rotate(Vector3(0, -mouse_sensitivity_x, 0))
+            self.light.direction = self.camera.get_look_direction()
         if keys[pygame.K_UP]:
-            self.camera.rotation.add(Vector3(-camera_speed*10, 0, 0))
+            self.camera.rotate(Vector3(-mouse_sensitivity_y, 0, 0))
+            self.light.direction = self.camera.get_look_direction()
         if keys[pygame.K_DOWN]:
-            self.camera.rotation.add(Vector3(camera_speed*10, 0, 0))
-        if self.camera.rotation.x > 89:
-            self.camera.rotation.x = 89
-        if self.camera.rotation.x < -89:
-            self.camera.rotation.x = -89
+            self.camera.rotate(Vector3(mouse_sensitivity_y, 0, 0))
+            self.light.direction = self.camera.get_look_direction()
 
     def draw(self):
-        axis_points = self.project(self.axis_mesh)
-        axis_points.sort(key=lambda t: t.average_z())
-        for triangle in axis_points:
+        axis = self.project(self.axis_mesh).sort()
+        for triangle in axis.triangles:
             self.draw_triangle(triangle)
 
-        # spaceship_points = self.project(self.spaceship_mesh)
-        # spaceship_points.sort(key=lambda t: t.average_z())
-        # for triangle in spaceship_points:
+        # spaceship = self.project(self.spaceship_mesh).sort()
+        # for triangle in spaceship.triangles:
         #     self.draw_triangle(triangle)
 
-    def project(self, triangles: 'list[Triangle]') -> 'list[Triangle]':
-        rotation_matrix_x = get_rotation_matrix_x(self.theta_x)
-        rotation_matrix_z = get_rotation_matrix_z(self.theta_z)
-        scaling_matrix = get_scaling_matrix(200, 200 * self.aspect_ratio, 1)
+    def project(self, mesh: Mesh) -> Mesh:
+        rotation_matrix_x = get_rotation_matrix_x(0)
+        rotation_matrix_z = get_rotation_matrix_z(0)
+        scaling_matrix = get_scaling_matrix(200, 200 * self.height / self.width, 1)
         translation_matrix = get_translation_matrix(self.width / 2, self.height / 2, 1)
-        
-        target = Vector3(0, 0, 0)
-        target.add(self.camera.position)
-        
-        pitch_rad = -np.deg2rad(self.camera.rotation.x)
-        yaw_rad = -np.deg2rad(self.camera.rotation.y)
-        self.look_direction.x = np.cos(pitch_rad) * np.cos(yaw_rad)
-        self.look_direction.y = np.sin(pitch_rad)
-        self.look_direction.z = np.cos(pitch_rad) * np.sin(yaw_rad)
-        target.add(self.look_direction)
-        view_matrix = get_look_at_matrix(self.camera.position, target, self.up)
-
-        self.light = self.look_direction
 
         result_triangles = []
-        for triangle in triangles:
-            result_points = []
-
-            point0 = triangle.points[0].as_matrix()
-            point1 = triangle.points[1].as_matrix()
-            point2 = triangle.points[2].as_matrix()
-
-            point0 = np.matmul(
-                rotation_matrix_z, point0)
-            point1 = np.matmul(
-                rotation_matrix_z, point1)
-            point2 = np.matmul(
-                rotation_matrix_z, point2)
-
-            point0 = np.matmul(
-                rotation_matrix_x, point0)
-            point1 = np.matmul(
-                rotation_matrix_x, point1)
-            point2 = np.matmul(
-                rotation_matrix_x, point2)
+        for triangle in mesh.triangles:
+            point0 = Transform(triangle.points[0].as_matrix())\
+                .multiply(rotation_matrix_z)\
+                .multiply(rotation_matrix_x)\
+                .vector_matrix
+            point1 = Transform(triangle.points[1].as_matrix())\
+                .multiply(rotation_matrix_z)\
+                .multiply(rotation_matrix_x)\
+                .vector_matrix
+            point2 = Transform(triangle.points[2].as_matrix())\
+                .multiply(rotation_matrix_z)\
+                .multiply(rotation_matrix_x)\
+                .vector_matrix
 
             point0[2] -= 20
             point1[2] -= 20
             point2[2] -= 20
             
-            line1 = Vector3(0, 0, 0)
-            line1.x = point1[0] - point0[0]
-            line1.y = point1[1] - point0[1]
-            line1.z = point1[2] - point0[2]
+            normal = Triangle((Vector3.of(point0), Vector3.of(point1), Vector3.of(point2)), 0)\
+                .get_normal()\
+                .normalize()
 
-            line2 = Vector3(0, 0, 0)
-            line2.x = point2[0] - point0[0]
-            line2.y = point2[1] - point0[1]
-            line2.z = point2[2] - point0[2]
-
-            normal = Vector3(0, 0, 0)
-            normal.x = line1.y * line2.z - line1.z * line2.y
-            normal.y = line1.z * line2.x - line1.x * line2.z
-            normal.z = line1.x * line2.y - line1.y * line2.x
-            normal.normalize()
-
-            camera_offset = [point0[0] - self.camera.position.x, point0[1] - self.camera.position.y, point0[2] - self.camera.position.z, 0]
+            camera_offset = Vector3.of(point0)\
+                .add(self.camera.pos, -1)\
+                .as_matrix(0)
             
             if np.dot(normal.as_matrix(0), camera_offset) < 0:
-                luminance = np.dot(normal.as_matrix(0), self.light.as_matrix(0))
+                look_at_matrix = get_look_at_matrix(self.camera.pos, self.camera.target, self.camera.up)
 
-                print(self.camera.position)
-                print(target)
-                print(self.up)
-                print()
-
-                point0 = np.matmul(
-                    view_matrix, point0)
-                point1 = np.matmul(
-                    view_matrix, point1)
-                point2 = np.matmul(
-                    view_matrix, point2)
-
-                point0 = np.matmul(
-                    self.projection_matrix, point0)
-                point1 = np.matmul(
-                    self.projection_matrix, point1)
-                point2 = np.matmul(
-                    self.projection_matrix, point2)
-
-                point0 = np.matmul(
-                    scaling_matrix, point0)
-                point1 = np.matmul(
-                    scaling_matrix, point1)
-                point2 = np.matmul(
-                    scaling_matrix, point2)
-
-                point0 = np.matmul(
-                    translation_matrix, point0)
-                point1 = np.matmul(
-                    translation_matrix, point1)
-                point2 = np.matmul(
-                    translation_matrix, point2)
-
-                w0 = point0[3]
-                if w0 != 0:
-                    division_scaling_matrix = get_scaling_matrix(1/w0, 1/w0, 1/w0)
-                    point0 = np.matmul(division_scaling_matrix, point0)
-                result_points.append(Vector3(point0[0], point0[1], point0[2]))
-
-                w1 = point1[3]
-                if w1 != 0:
-                    division_scaling_matrix = get_scaling_matrix(1/w1, 1/w1, 1/w1)
-                    point1 = np.matmul(division_scaling_matrix, point1)
-                result_points.append(Vector3(point1[0], point1[1], point1[2]))
-
-                w2 = point2[3]
-                if w2 != 0:
-                    division_scaling_matrix = get_scaling_matrix(1/w2, 1/w2, 1/w2)
-                    point2 = np.matmul(division_scaling_matrix, point2)
-                result_points.append(Vector3(point2[0], point2[1], point2[2]))
-            
-                result_triangles.append(Triangle(result_points, luminance))
-        return result_triangles
+                point0 = Transform(point0)\
+                    .multiply(look_at_matrix)\
+                    .multiply(self.projector.get_projection_matrix())\
+                    .multiply(scaling_matrix)\
+                    .multiply(translation_matrix)\
+                    .vector_matrix
+                point1 = Transform(point1)\
+                    .multiply(look_at_matrix)\
+                    .multiply(self.projector.get_projection_matrix())\
+                    .multiply(scaling_matrix)\
+                    .multiply(translation_matrix)\
+                    .vector_matrix
+                point2 = Transform(point2)\
+                    .multiply(look_at_matrix)\
+                    .multiply(self.projector.get_projection_matrix())\
+                    .multiply(scaling_matrix)\
+                    .multiply(translation_matrix)\
+                    .vector_matrix
+                
+                luminance = np.dot(normal.as_matrix(0), self.light.direction.as_matrix(0))
+                triangle = Triangle((Vector3.of(point0), Vector3.of(point1), Vector3.of(point2)), luminance)
+                result_triangles.append(triangle)
+        return Mesh(result_triangles)
 
     def draw_triangle(self, triangle: Triangle):
+        if DrawingMode.Solid in self.drawing_mode:
+            self.draw_solid(triangle)
+        if DrawingMode.Wireframe in self.drawing_mode:
+            self.draw_wireframe(triangle)
+
+    def draw_solid(self, triangle: Triangle):
         points = triangle.points
 
         r = Color.WHITE[0] * triangle.luminance
@@ -244,21 +192,27 @@ class Engine:
                 (points[2].x, points[2].y),
             ]
         )
-        
+    
+    def draw_wireframe(self, triangle: Triangle):
+        points = triangle.points
+        color = Color.WHITE
+        if DrawingMode.Solid in self.drawing_mode:
+            color = Color.BLACK
+
         pygame.draw.line(
             self.screen,
-            Color.BLACK,
+            color,
             (points[0].x, points[0].y),
             (points[1].x, points[1].y))
 
         pygame.draw.line(
             self.screen,
-            Color.BLACK,
+            color,
             (points[1].x, points[1].y),
             (points[2].x, points[2].y))
 
         pygame.draw.line(
             self.screen,
-            Color.BLACK,
+            color,
             (points[2].x, points[2].y),
             (points[0].x, points[0].y))
