@@ -1,5 +1,7 @@
 import numpy as np
 
+from util.vector import Vector3
+
 def get_projection_matrix(aspect_ratio: float, fov: float, near: float, far: float):
     fov_rad = 1 / np.tan(np.deg2rad(fov) * 0.5)
     
@@ -12,6 +14,43 @@ def get_projection_matrix(aspect_ratio: float, fov: float, near: float, far: flo
     projection_matrix[3, 3] = 0
     return projection_matrix
 
+def get_look_at_matrix(pos: Vector3, target: Vector3, up: Vector3):
+    forward_vector = target.copy()
+    forward_vector.subtract(pos)
+    forward_vector.normalize()
+
+    projection_size = np.dot(up.as_matrix(0), forward_vector.as_matrix(0))
+    tmp_forward_matrix = forward_vector.as_matrix() * projection_size
+    tmp_forward_vector = Vector3(tmp_forward_matrix[0], tmp_forward_matrix[1], tmp_forward_matrix[2])
+    new_up_vector = up.copy()
+    new_up_vector.subtract(tmp_forward_vector)
+    new_up_vector.normalize()
+
+    new_up_matrix = [new_up_vector.x, new_up_vector.y, new_up_vector.z]
+    forward_matrix = [forward_vector.x, forward_vector.y, forward_vector.z]
+    right_matrix = np.cross(new_up_matrix, forward_matrix)
+    right_vector = Vector3(right_matrix[0], right_matrix[1], right_matrix[2])
+
+    look_at_matrix = np.array([
+        [right_vector.x, right_vector.y, right_vector.z, -pos.x],
+        [new_up_vector.x, new_up_vector.y, new_up_vector.z, -pos.y],
+        [forward_vector.x, forward_vector.y, forward_vector.z, -pos.z],
+        [0, 0, 0, 1],
+    ])
+    return look_at_matrix
+    
+def get_camera_rotation_matrix(pitch: float, yaw: float):
+    pitch_rad = np.deg2rad(pitch)
+    yaw_rad = np.deg2rad(yaw)
+
+    rotation_matrix = np.zeros((4, 4))
+    rotation_matrix[0, 0] = 1
+    rotation_matrix[1, 1] = 1
+    rotation_matrix[1, 2] = 1
+    rotation_matrix[0, 3] = np.cos(yaw_rad) * np.cos(pitch_rad)
+    rotation_matrix[1, 3] = np.sin(pitch_rad)
+    rotation_matrix[2, 3] = np.sin(yaw_rad) * np.cos(pitch_rad)
+    return rotation_matrix
 
 def get_rotation_matrix_x(theta: float):
     theta_rad = np.deg2rad(theta)
